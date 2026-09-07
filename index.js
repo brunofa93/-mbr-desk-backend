@@ -4,11 +4,17 @@ import pg from "pg";
 const { Pool } = pg;
 
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DATABASE_URL?.includes("localhost") ? false : { rejectUnauthorized: false }
+  connectionString: envStr("DATABASE_URL"),
+  ssl: envStr("DATABASE_URL").includes("localhost") ? false : { rejectUnauthorized: false }
 });
 
 const CAL_SCOPE = "https://www.googleapis.com/auth/calendar.readonly";
+
+// Defensive: a leading/trailing space pasted into a Vercel env var (e.g. BASE_URL)
+// silently corrupts values used inside URLs (redirect_uri, etc.) with no clear
+// error from Google/OAuth — it just shows as "invalid_request". Trim everywhere
+// an env var is read so this class of bug can't recur.
+function envStr(name){ return (process.env[name] || "").trim(); }
 
 function json(res, status, data, extra={}) {
   res.statusCode=status;
@@ -26,14 +32,14 @@ function html(res, status, body) {
 function sha(v){ return crypto.createHash("sha256").update(v).digest("hex"); }
 function rand(n=24){ return crypto.randomBytes(n).toString("base64url"); }
 function baseUrl(req){
-  return process.env.BASE_URL || `https://${req.headers["x-forwarded-host"] || req.headers.host}`;
+  return envStr("BASE_URL") || `https://${req.headers["x-forwarded-host"] || req.headers.host}`;
 }
 function safeEq(a,b){
   const A=Buffer.from(a||""), B=Buffer.from(b||"");
   return A.length===B.length && crypto.timingSafeEqual(A,B);
 }
 function key32(){
-  const raw=process.env.TOKEN_ENCRYPTION_KEY||"";
+  const raw=envStr("TOKEN_ENCRYPTION_KEY");
   let b;
   try { b=Buffer.from(raw,"base64"); } catch {}
   if(!b || b.length!==32) throw new Error("TOKEN_ENCRYPTION_KEY must be base64 32 bytes");
@@ -116,8 +122,8 @@ async function googleRefresh(device){
   const refresh=decrypt(device.google_refresh_token_enc);
   if(!refresh) throw new Error("reconnect_required");
   const body=new URLSearchParams({
-    client_id:process.env.GOOGLE_CLIENT_ID||"",
-    client_secret:process.env.GOOGLE_CLIENT_SECRET||"",
+    client_id:envStr("GOOGLE_CLIENT_ID"),
+    client_secret:envStr("GOOGLE_CLIENT_SECRET"),
     refresh_token:refresh,
     grant_type:"refresh_token"
   });
@@ -182,13 +188,14 @@ function normalizeEvent(e,calName){
 async function computeTravel(origin,destination){
   if(!origin) return {minutes:-1,distanceKm:-1,status:"origin_missing"};
   if(!destination) return {minutes:-1,distanceKm:-1,status:"destination_missing"};
-  if(!process.env.ROUTES_API_KEY) return {minutes:-1,distanceKm:-1,status:"routes_not_configured"};
+  const routesKey=envStr("ROUTES_API_KEY");
+  if(!routesKey) return {minutes:-1,distanceKm:-1,status:"routes_not_configured"};
   try{
     const r=await fetch("https://routes.googleapis.com/directions/v2:computeRoutes",{
       method:"POST",
       headers:{
         "content-type":"application/json",
-        "x-goog-api-key":process.env.ROUTES_API_KEY,
+        "x-goog-api-key":routesKey,
         "x-goog-fieldmask":"routes.duration,routes.distanceMeters"
       },
       body:JSON.stringify({
@@ -327,7 +334,7 @@ export default async function handler(req,res){
       const code=u.searchParams.get("code")||"", a=await validAccess(code); if(!a) return json(res,410,{error:"expired"});
       const state=rand(24); await q("insert into oauth_states(state_hash,code_hash,expires_at) values($1,$2,now()+interval '10 minutes')",[sha(state),sha(code)]);
       const o=new URL("https://accounts.google.com/o/oauth2/v2/auth");
-      o.searchParams.set("client_id",process.env.GOOGLE_CLIENT_ID||""); o.searchParams.set("redirect_uri",`${baseUrl(req)}/api/oauth/callback`);
+      o.searchParams.set("client_id",envStr("GOOGLE_CLIENT_ID")); o.searchParams.set("redirect_uri",`${baseUrl(req)}/api/oauth/callback`);
       o.searchParams.set("response_type","code"); o.searchParams.set("scope",CAL_SCOPE); o.searchParams.set("access_type","offline");
       o.searchParams.set("include_granted_scopes","true"); o.searchParams.set("prompt","consent"); o.searchParams.set("state",state);
       res.statusCode=302; res.setHeader("location",o.toString()); return res.end();
@@ -338,7 +345,7 @@ export default async function handler(req,res){
         where o.state_hash=$1 and o.expires_at>now() and a.expires_at>now() and a.consumed_at is null`,[sha(state)]);
       if(!s.rowCount) return json(res,403,{error:"invalid_state"});
       const t=await fetch("https://oauth2.googleapis.com/token",{method:"POST",headers:{"content-type":"application/x-www-form-urlencoded"},
-        body:new URLSearchParams({client_id:process.env.GOOGLE_CLIENT_ID||"",client_secret:process.env.GOOGLE_CLIENT_SECRET||"",
+        body:new URLSearchParams({client_id:envStr("GOOGLE_CLIENT_ID"),client_secret:envStr("GOOGLE_CLIENT_SECRET"),
         code,grant_type:"authorization_code",redirect_uri:`${baseUrl(req)}/api/oauth/callback`})});
       const tj=await t.json(); if(!t.ok||!tj.access_token) return json(res,502,{error:"oauth_exchange_failed"});
       const current=await q("select google_refresh_token_enc from devices where device_id=$1",[s.rows[0].device_id]);
@@ -374,7 +381,8 @@ export default async function handler(req,res){
     }
     if(req.method==="POST" && p==="/api/admin/devices"){
       const auth=String(req.headers.authorization||"");
-      if(!process.env.ADMIN_TOKEN||!safeEq(auth,`Bearer ${process.env.ADMIN_TOKEN}`)) return json(res,401,{error:"unauthorized"});
+      const adminToken=envStr("ADMIN_TOKEN");
+      if(!adminToken||!safeEq(auth,`Bearer ${adminToken}`)) return json(res,401,{error:"unauthorized"});
       const b=await bodyJson(req), id=String(b.deviceId||`MBR-${rand(8)}`), secret=rand(32);
       await q("insert into devices(device_id,secret_hash) values($1,$2) on conflict do nothing",[id,sha(secret)]);
       return json(res,201,{deviceId:id,deviceSecret:secret});
