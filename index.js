@@ -14,7 +14,7 @@ const CAL_SCOPE = "https://www.googleapis.com/auth/calendar.readonly";
 // silently corrupts values used inside URLs (redirect_uri, etc.) with no clear
 // error from Google/OAuth — it just shows as "invalid_request". Trim everywhere
 // an env var is read so this class of bug can't recur.
-function envStr(name){ return (process.env[name] || "").trim(); }
+function envStr(name){ return (process.env[name] || "").trim().replace(/^["']+|["']+$/g,""); }
 
 function json(res, status, data, extra={}) {
   res.statusCode=status;
@@ -32,7 +32,10 @@ function html(res, status, body) {
 function sha(v){ return crypto.createHash("sha256").update(v).digest("hex"); }
 function rand(n=24){ return crypto.randomBytes(n).toString("base64url"); }
 function baseUrl(req){
-  return envStr("BASE_URL") || `https://${req.headers["x-forwarded-host"] || req.headers.host}`;
+  const v=envStr("BASE_URL") || `https://${req.headers["x-forwarded-host"] || req.headers.host}`;
+  return v.replace(/\/+$/,""); // strip trailing slash(es) — a trailing "/" here doubles up
+                                 // into "//api/..." wherever this is used, which Google
+                                 // treats as a different redirect_uri (mismatch).
 }
 function safeEq(a,b){
   const A=Buffer.from(a||""), B=Buffer.from(b||"");
@@ -186,28 +189,32 @@ function normalizeEvent(e,calName){
   };
 }
 async function computeTravel(origin,destination){
-  if(!origin) return {minutes:-1,distanceKm:-1,status:"origin_missing"};
-  if(!destination) return {minutes:-1,distanceKm:-1,status:"destination_missing"};
-  const routesKey=envStr("ROUTES_API_KEY");
-  if(!routesKey) return {minutes:-1,distanceKm:-1,status:"routes_not_configured"};
+  // Travel/ETA-to-hospital feature was removed from the product (2026-09) to avoid
+  // unbounded Google Routes API billing at scale (every ~30s poll per device would
+  // have far exceeded the free tier once multiple units are sold). No external call
+  // is made here anymore. Kept as a no-op so callers/JSON shape stay unchanged.
+  return {minutes:-1,distanceKm:-1,status:""};
+}
+async function computeWeather(origin){
+  // Weather widget for the screensaver. Uses OpenWeatherMap's free tier
+  // (commercial use allowed with attribution, ~1,000 calls/day) — cheap
+  // enough that even the 1h cache below keeps this permanently free at
+  // realistic device counts. No key configured => feature just stays blank.
+  if(!origin) return {tempC:null,condition:""};
+  const key=envStr("WEATHER_API_KEY");
+  if(!key) return {tempC:null,condition:""};
   try{
-    const r=await fetch("https://routes.googleapis.com/directions/v2:computeRoutes",{
-      method:"POST",
-      headers:{
-        "content-type":"application/json",
-        "x-goog-api-key":routesKey,
-        "x-goog-fieldmask":"routes.duration,routes.distanceMeters"
-      },
-      body:JSON.stringify({
-        origin:{address:origin}, destination:{address:destination},
-        travelMode:"DRIVE", routingPreference:"TRAFFIC_AWARE"
-      })
-    });
-    const j=await r.json();
-    if(!r.ok || !j.routes?.[0]) return {minutes:-1,distanceKm:-1,status:"route_failed"};
-    const sec=parseFloat(String(j.routes[0].duration||"0s").replace("s",""));
-    return {minutes:Math.max(1,Math.round(sec/60)),distanceKm:Math.round((j.routes[0].distanceMeters||0)/100)/10,status:"online"};
-  }catch{return {minutes:-1,distanceKm:-1,status:"route_failed"};}
+    const geo=await fetch(`https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(origin)}&limit=1&appid=${key}`);
+    const gj=await geo.json();
+    const loc=Array.isArray(gj)?gj[0]:null;
+    if(!loc) return {tempC:null,condition:""};
+    const w=await fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${loc.lat}&lon=${loc.lon}&units=metric&appid=${key}`);
+    const wj=await w.json();
+    if(!w.ok || wj.cod!==200) return {tempC:null,condition:""};
+    const temp=wj.main&&typeof wj.main.temp==="number"?Math.round(wj.main.temp):null;
+    const condition=String((wj.weather&&wj.weather[0]&&wj.weather[0].description)||"");
+    return {tempC:temp,condition};
+  }catch{return {tempC:null,condition:""};}
 }
 async function syncDevice(device){
   const token=await googleRefresh(device);
@@ -229,10 +236,18 @@ async function syncDevice(device){
   const nextShift=monthShifts.find(e=>Date.parse(e.endIso)>now);
   const travel=await computeTravel(device.origin_text,nextShift?.hospital||nextShift?.location||"");
   const lastSync=Math.floor(Date.now()/1000);
+  const WEATHER_TTL_S=3600; // 1h — weather doesn't need to be fresher than this, and it keeps
+                            // API usage trivial (~24 calls/day/device) at any device count.
+  let weather=device.cached_weather||{tempC:null,condition:""};
+  let weatherSyncedAt=Number(device.weather_synced_at||0);
+  if(!device.cached_weather || (lastSync-weatherSyncedAt)>WEATHER_TTL_S){
+    weather=await computeWeather(device.origin_text);
+    weatherSyncedAt=lastSync;
+  }
   await q(`update devices set selected_calendars=$2::jsonb,last_sync=$3,last_status='online',
-    cached_events=$4::jsonb,cached_month_shifts=$5::jsonb,updated_at=now() where device_id=$1`,
-    [device.device_id,JSON.stringify(calendars),lastSync,JSON.stringify(events),JSON.stringify(monthShifts)]);
-  return {linked:true,status:"online",events,monthShifts,travel,lastSync};
+    cached_events=$4::jsonb,cached_month_shifts=$5::jsonb,cached_weather=$6::jsonb,weather_synced_at=$7,updated_at=now() where device_id=$1`,
+    [device.device_id,JSON.stringify(calendars),lastSync,JSON.stringify(events),JSON.stringify(monthShifts),JSON.stringify(weather),weatherSyncedAt]);
+  return {linked:true,status:"online",events,monthShifts,travel,weather,lastSync};
 }
 function statusFromRow(d){
   const linked=!!d.google_refresh_token_enc;
@@ -240,6 +255,7 @@ function statusFromRow(d){
     linked,status:linked?(d.last_status||"online"):"unlinked",
     events:d.cached_events||[],monthShifts:d.cached_month_shifts||[],
     travel:{minutes:-1,distanceKm:-1,status:d.origin_text?"pending":"origin_missing"},
+    weather:d.cached_weather||{tempC:null,condition:""},
     lastSync:Number(d.last_sync||0)
   };
 }
@@ -390,6 +406,9 @@ export default async function handler(req,res){
     return json(res,404,{error:"not_found"});
   }catch(e){
     console.error(e);
-    return json(res,500,{error:"server_error"});
+    // TEMP DIAGNOSTIC (v5.1.4-debug): surface the error message to unblock debugging.
+    // Safe: every throw site in this file uses a fixed string, never an env var value.
+    // Remove the "detail" field before going live.
+    return json(res,500,{error:"server_error",detail:String((e&&e.message)||e).slice(0,300)});
   }
 }
