@@ -1,3 +1,4 @@
+
 import crypto from "node:crypto";
 import pg from "pg";
 const { Pool } = pg;
@@ -390,9 +391,35 @@ export default async function handler(req,res){
         if(d && d.origin_text && !city) out.resultado=await computeWeather(d.origin_text);
       }
       if(city){ out.cityTestada=city; out.resultado=await computeWeather(city); }
+      // Testa a MESMA busca que alimenta os botoes do seletor, sem exigir codigo de QR.
+      const q2=u.searchParams.get("buscaCidade")||"";
+      if(q2){
+        const key=envStr("WEATHER_API_KEY");
+        try{
+          const r2=await fetch(`https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(q2)}&limit=5&appid=${key}`);
+          const arr=await r2.json();
+          out.buscaCidade={termo:q2,httpStatus:r2.status,
+            opcoes:(Array.isArray(arr)?arr:[]).map(c=>[c.name,c.state,c.country].filter(Boolean).join(", "))};
+        }catch(e){ out.buscaCidade={termo:q2,erro:String(e&&e.message||e).slice(0,120)}; }
+      }
+      // Lista as agendas do Google como a pagina de gerenciamento faria.
+      if(u.searchParams.get("agendas")==="1" && deviceId){
+        try{
+          const dr2=await q("select * from devices where device_id=$1",[deviceId]);
+          const dev=dr2.rows[0];
+          if(!dev) out.agendas="device_nao_encontrado";
+          else if(!dev.google_refresh_token_enc) out.agendas="google_nao_vinculado";
+          else{
+            const tk=await googleRefresh(dev);
+            const cl=await calendarList(tk);
+            out.agendas={quantidade:cl.length,nomes:cl.map(c=>c.summary).slice(0,20),
+              selecionadasNoBanco:dev.selected_calendars||[]};
+          }
+        }catch(e){ out.agendas={erro:String(e&&e.message||e).slice(0,160)}; }
+      }
       return json(res,200,out);
     }
-    if(req.method==="GET" && p==="/api/info") return json(res,200,{ready:true,protocol:1,service:"mbr-desk-vercel",build:"2026-09-10-seletor-cidade"});
+    if(req.method==="GET" && p==="/api/info") return json(res,200,{ready:true,protocol:1,service:"mbr-desk-vercel",build:"2026-09-10-diag2"});
     if(req.method==="GET" && p==="/") return html(res,200,`<html><body style="font-family:system-ui;background:#07111f;color:white;padding:40px"><h1>MBR Desk</h1><p>Serviço online.</p></body></html>`);
     if(req.method==="GET" && (p==="/activate"||p==="/manage")){
       const code=u.searchParams.get("code")||"";
