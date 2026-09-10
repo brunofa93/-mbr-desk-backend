@@ -288,6 +288,7 @@ function page(kind,code){
   main{max-width:620px;margin:0 auto;padding:28px 18px}.logo{color:#d8ae55;font-weight:800;font-size:36px;letter-spacing:2px}
   .card{background:#101c2c;border:1px solid #27364b;border-radius:18px;padding:18px;margin-top:18px}
   button{background:#d8ae55;color:#07111f;border:0;border-radius:12px;padding:13px 16px;font-weight:750;font-size:16px}
+  select{width:100%;box-sizing:border-box;padding:13px;border-radius:10px;border:1px solid #3a4b64;background:#0b1626;color:white;font-size:16px}
   input[type=text],input:not([type]){width:100%;box-sizing:border-box;padding:12px;border-radius:10px;border:1px solid #3a4b64;background:#0b1626;color:white}
   /* Checkbox precisa ficar de fora da regra acima: com width:100% ele virava uma
      barra escura sobre fundo escuro e a lista de agendas parecia vazia. */
@@ -301,9 +302,90 @@ border:1px solid #2a3b52;background:#0f1b2d;color:#e8eef7;font-size:15px;cursor:
   <p class="muted">Sua conta Google fica no serviço MBR. O aparelho nunca recebe suas credenciais Google.</p>
   <div class="card"><div id="state">Carregando...</div><div id="controls" style="display:none">
   <h3>Agendas</h3><div id="cals"></div><h3>Sua cidade</h3>
-  <input id="origin" placeholder="Digite e escolha na lista. Ex.: São Paulo" autocomplete="off">
-  <div id="cityhits"></div>
-  <div id="citychosen" class="muted" style="margin-top:6px"></div>
+  <select id="origin">
+    <option value="">Selecione sua cidade...</option>
+    <option value="-1.3656|-48.3722|Ananindeua, PA">Ananindeua, PA</option>
+    <option value="-16.3267|-48.9526|Anápolis, GO">Anápolis, GO</option>
+    <option value="-16.8198|-49.2469|Aparecida de Goiânia, GO">Aparecida de Goiânia, GO</option>
+    <option value="-10.9472|-37.0731|Aracaju, SE">Aracaju, SE</option>
+    <option value="-22.3147|-49.0606|Bauru, SP">Bauru, SP</option>
+    <option value="-19.9167|-43.9345|Belo Horizonte, MG">Belo Horizonte, MG</option>
+    <option value="-1.4558|-48.4902|Belém, PA">Belém, PA</option>
+    <option value="-19.9678|-44.1978|Betim, MG">Betim, MG</option>
+    <option value="-26.9194|-49.0661|Blumenau, SC">Blumenau, SC</option>
+    <option value="2.8235|-60.6758|Boa Vista, RR">Boa Vista, RR</option>
+    <option value="-15.7797|-47.9297|Brasília, DF">Brasília, DF</option>
+    <option value="-7.2306|-35.8811|Campina Grande, PB">Campina Grande, PB</option>
+    <option value="-22.9056|-47.0608|Campinas, SP">Campinas, SP</option>
+    <option value="-20.4697|-54.6201|Campo Grande, MS">Campo Grande, MS</option>
+    <option value="-21.7545|-41.3244|Campos dos Goytacazes, RJ">Campos dos Goytacazes, RJ</option>
+    <option value="-29.9177|-51.1836|Canoas, RS">Canoas, RS</option>
+    <option value="-20.2632|-40.4164|Cariacica, ES">Cariacica, ES</option>
+    <option value="-8.2837|-35.9761|Caruaru, PE">Caruaru, PE</option>
+    <option value="-24.9555|-53.4552|Cascavel, PR">Cascavel, PR</option>
+    <option value="-3.736|-38.6533|Caucaia, CE">Caucaia, CE</option>
+    <option value="-29.1685|-51.1794|Caxias do Sul, RS">Caxias do Sul, RS</option>
+    <option value="-27.1004|-52.6152|Chapecó, SC">Chapecó, SC</option>
+    <option value="-19.9317|-44.0536|Contagem, MG">Contagem, MG</option>
+    <option value="-28.6775|-49.3697|Criciúma, SC">Criciúma, SC</option>
+    <option value="-15.6014|-56.0979|Cuiabá, MT">Cuiabá, MT</option>
+    <option value="-25.4284|-49.2733|Curitiba, PR">Curitiba, PR</option>
+    <option value="-22.2211|-54.8056|Dourados, MS">Dourados, MS</option>
+    <option value="-22.7856|-43.3117|Duque de Caxias, RJ">Duque de Caxias, RJ</option>
+    <option value="-12.2664|-38.9663|Feira de Santana, BA">Feira de Santana, BA</option>
+    <option value="-27.5954|-48.548|Florianópolis, SC">Florianópolis, SC</option>
+    <option value="-3.7172|-38.5433|Fortaleza, CE">Fortaleza, CE</option>
+    <option value="-16.6799|-49.255|Goiânia, GO">Goiânia, GO</option>
+    <option value="-23.4543|-46.5337|Guarulhos, SP">Guarulhos, SP</option>
+    <option value="-5.5264|-47.4917|Imperatriz, MA">Imperatriz, MA</option>
+    <option value="-8.1128|-35.0147|Jaboatão dos Guararapes, PE">Jaboatão dos Guararapes, PE</option>
+    <option value="-26.3044|-48.8487|Joinville, SC">Joinville, SC</option>
+    <option value="-7.1195|-34.845|João Pessoa, PB">João Pessoa, PB</option>
+    <option value="-7.2131|-39.3153|Juazeiro do Norte, CE">Juazeiro do Norte, CE</option>
+    <option value="-21.7642|-43.3496|Juiz de Fora, MG">Juiz de Fora, MG</option>
+    <option value="-23.3045|-51.1696|Londrina, PR">Londrina, PR</option>
+    <option value="0.0389|-51.0664|Macapá, AP">Macapá, AP</option>
+    <option value="-9.6658|-35.7353|Maceió, AL">Maceió, AL</option>
+    <option value="-3.119|-60.0217|Manaus, AM">Manaus, AM</option>
+    <option value="-23.4253|-51.9386|Maringá, PR">Maringá, PR</option>
+    <option value="-16.735|-43.8617|Montes Claros, MG">Montes Claros, MG</option>
+    <option value="-5.1875|-37.3441|Mossoró, RN">Mossoró, RN</option>
+    <option value="-5.7945|-35.211|Natal, RN">Natal, RN</option>
+    <option value="-22.8832|-43.1034|Niterói, RJ">Niterói, RJ</option>
+    <option value="-22.7592|-43.451|Nova Iguaçu, RJ">Nova Iguaçu, RJ</option>
+    <option value="-8.0089|-34.8553|Olinda, PE">Olinda, PE</option>
+    <option value="-23.5329|-46.7918|Osasco, SP">Osasco, SP</option>
+    <option value="-10.1849|-48.3336|Palmas, TO">Palmas, TO</option>
+    <option value="-31.7654|-52.3371|Pelotas, RS">Pelotas, RS</option>
+    <option value="-9.3891|-40.503|Petrolina, PE">Petrolina, PE</option>
+    <option value="-25.0945|-50.1633|Ponta Grossa, PR">Ponta Grossa, PR</option>
+    <option value="-30.0346|-51.2177|Porto Alegre, RS">Porto Alegre, RS</option>
+    <option value="-8.7612|-63.9004|Porto Velho, RO">Porto Velho, RO</option>
+    <option value="-8.0476|-34.877|Recife, PE">Recife, PE</option>
+    <option value="-21.1775|-47.8103|Ribeirão Preto, SP">Ribeirão Preto, SP</option>
+    <option value="-9.9754|-67.8249|Rio Branco, AC">Rio Branco, AC</option>
+    <option value="-22.9068|-43.1729|Rio de Janeiro, RJ">Rio de Janeiro, RJ</option>
+    <option value="-16.4673|-54.6372|Rondonópolis, MT">Rondonópolis, MT</option>
+    <option value="-12.9777|-38.5016|Salvador, BA">Salvador, BA</option>
+    <option value="-29.6842|-53.8069|Santa Maria, RS">Santa Maria, RS</option>
+    <option value="-2.4399|-54.6996|Santarém, PA">Santarém, PA</option>
+    <option value="-23.6639|-46.5383|Santo André, SP">Santo André, SP</option>
+    <option value="-23.9608|-46.3336|Santos, SP">Santos, SP</option>
+    <option value="-20.1288|-40.3078|Serra, ES">Serra, ES</option>
+    <option value="-23.5015|-47.4526|Sorocaba, SP">Sorocaba, SP</option>
+    <option value="-23.6914|-46.5646|São Bernardo do Campo, SP">São Bernardo do Campo, SP</option>
+    <option value="-22.8268|-43.0634|São Gonçalo, RJ">São Gonçalo, RJ</option>
+    <option value="-20.8113|-49.3758|São José do Rio Preto, SP">São José do Rio Preto, SP</option>
+    <option value="-23.1896|-45.8841|São José dos Campos, SP">São José dos Campos, SP</option>
+    <option value="-2.5307|-44.3068|São Luís, MA">São Luís, MA</option>
+    <option value="-23.5505|-46.6333|São Paulo, SP">São Paulo, SP</option>
+    <option value="-5.0892|-42.8019|Teresina, PI">Teresina, PI</option>
+    <option value="-18.9186|-48.2772|Uberlândia, MG">Uberlândia, MG</option>
+    <option value="-20.3297|-40.2925|Vila Velha, ES">Vila Velha, ES</option>
+    <option value="-14.8615|-40.8442|Vitória da Conquista, BA">Vitória da Conquista, BA</option>
+    <option value="-20.3155|-40.3128|Vitória, ES">Vitória, ES</option>
+    <option value="-15.6465|-56.1326|Várzea Grande, MT">Várzea Grande, MT</option>
+  </select>
   <br><button id="save">Salvar</button></div></div>
   <script>
   const code=${JSON.stringify(code||"")};
@@ -314,38 +396,27 @@ border:1px solid #2a3b52;background:#0f1b2d;color:#e8eef7;font-size:15px;cursor:
       connect.onclick=()=>location.href='/api/oauth/start?code='+encodeURIComponent(code);return}
     state.innerHTML='<span class=ok>Conta Google conectada</span>';
     controls.style.display='block'; origin.value=j.origin||'';
-    let pickedLat=(typeof j.lat==='number')?j.lat:null, pickedLon=(typeof j.lon==='number')?j.lon:null;
-    function showChosen(){
-      citychosen.innerHTML = (pickedLat!==null)
-        ? 'Cidade confirmada: <b>'+origin.value.replace(/</g,'&lt;')+'</b>'
-        : (origin.value ? 'Escolha a cidade na lista para confirmar.' : '');
+    // Lista fixa de cidades com coordenadas embutidas: sem digitacao, sem busca
+    // externa e sem como errar o nome. As coordenadas vao direto para a consulta
+    // de clima, entao nao existe etapa de interpretar texto.
+    let pickedLat=null, pickedLon=null;
+    if(j.origin){
+      for(const o of origin.options){
+        if(o.value && o.value.split('|')[2]===j.origin){ origin.value=o.value; break; }
+      }
     }
-    showChosen();
-    let tmr=null;
-    origin.addEventListener('input',()=>{
-      pickedLat=null; pickedLon=null; showChosen();
-      clearTimeout(tmr);
-      const term=origin.value.trim();
-      if(term.length<3){ cityhits.innerHTML=''; return; }
-      // Espera a digitacao parar antes de consultar, para nao disparar uma
-      // busca por tecla pressionada.
-      tmr=setTimeout(async()=>{
-        try{
-          const rr=await fetch('/api/session/cities?code='+encodeURIComponent(code)+'&q='+encodeURIComponent(term));
-          const jj=await rr.json();
-          cityhits.innerHTML='';
-          for(const c of (jj.cities||[])){
-            const b=document.createElement('button');
-            b.type='button'; b.className='cityhit'; b.textContent=c.label;
-            b.onclick=()=>{ origin.value=c.label; pickedLat=c.lat; pickedLon=c.lon; cityhits.innerHTML=''; showChosen(); };
-            cityhits.appendChild(b);
-          }
-        }catch(e){ cityhits.innerHTML=''; }
-      },350);
-    });
+    function readCity(){
+      const v=origin.value;
+      if(!v){ pickedLat=null; pickedLon=null; return ''; }
+      const p=v.split('|');
+      pickedLat=parseFloat(p[0]); pickedLon=parseFloat(p[1]);
+      return p[2];
+    }
+    readCity();
+    origin.addEventListener('change',readCity);
     cals.innerHTML=''; for(const c of j.calendars){let l=document.createElement('label');l.innerHTML='<input type=checkbox value="'+c.id.replaceAll('"','&quot;')+'" '+(c.selected?'checked':'')+'> '+c.summary;cals.appendChild(l)}
     save.onclick=async()=>{let calendars=[...cals.querySelectorAll('input:checked')].map(x=>x.value);
-      let rr=await fetch('/api/session/select',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({code,calendars,origin:origin.value,lat:pickedLat,lon:pickedLon})});
+      let rr=await fetch('/api/session/select',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({code,calendars,origin:readCity(),lat:pickedLat,lon:pickedLon})});
       let x=await rr.json();
       if(rr.ok){ state.innerHTML='<span class=ok>Salvo! O MBR Desk atualiza em alguns segundos. Pode editar e salvar de novo se precisar.</span>'; }
       else if(x.error==='expired'){ state.innerHTML='<span class=err>Este link expirou. Gere um novo QR Code no aparelho (Config) para salvar.</span>'; }
@@ -422,7 +493,7 @@ export default async function handler(req,res){
       }
       return json(res,200,out);
     }
-    if(req.method==="GET" && p==="/api/info") return json(res,200,{ready:true,protocol:1,service:"mbr-desk-vercel",build:"2026-09-10-fix-agendas"});
+    if(req.method==="GET" && p==="/api/info") return json(res,200,{ready:true,protocol:1,service:"mbr-desk-vercel",build:"2026-09-10-select-cidade"});
     if(req.method==="GET" && p==="/") return html(res,200,`<html><body style="font-family:system-ui;background:#07111f;color:white;padding:40px"><h1>MBR Desk</h1><p>Serviço online.</p></body></html>`);
     if(req.method==="GET" && (p==="/activate"||p==="/manage")){
       const code=u.searchParams.get("code")||"";
@@ -537,4 +608,3 @@ export default async function handler(req,res){
     return json(res,500,{error:"server_error"});
   }
 }
-
