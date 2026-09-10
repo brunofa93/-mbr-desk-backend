@@ -389,11 +389,19 @@ border:1px solid #2a3b52;background:#0f1b2d;color:#e8eef7;font-size:15px;cursor:
   <br><button id="save">Salvar</button></div></div>
   <script>
   const code=${JSON.stringify(code||"")};
+  // Referencias explicitas por getElementById. NAO depender da variavel global
+  // implicita criada a partir do id: 'origin' colide com window.origin (a URL do
+  // site), que e nativa e tem prioridade — o campo nunca era encontrado.
+  const origin=document.getElementById('origin');
+  const state=document.getElementById('state');
+  const controls=document.getElementById('controls');
+  const cals=document.getElementById('cals');
+  const save=document.getElementById('save');
   async function load(){
     let r=await fetch('/api/session?code='+encodeURIComponent(code)),j=await r.json();
     if(!r.ok){state.innerHTML='<span class=err>'+ (j.error||'Link inválido ou expirado')+'</span>';return}
     if(!j.linked){state.innerHTML='<p>Conta Google ainda não conectada.</p><button id=connect>Conectar Google</button>';
-      connect.onclick=()=>location.href='/api/oauth/start?code='+encodeURIComponent(code);return}
+      document.getElementById('connect').onclick=()=>location.href='/api/oauth/start?code='+encodeURIComponent(code);return}
     state.innerHTML='<span class=ok>Conta Google conectada</span>';
     controls.style.display='block'; origin.value=j.origin||'';
     // Lista fixa de cidades com coordenadas embutidas: sem digitacao, sem busca
@@ -506,7 +514,7 @@ export default async function handler(req,res){
       }
       return json(res,200,out);
     }
-    if(req.method==="GET" && p==="/api/info") return json(res,200,{ready:true,protocol:1,service:"mbr-desk-vercel",build:"2026-09-10-salvar-robusto"});
+    if(req.method==="GET" && p==="/api/info") return json(res,200,{ready:true,protocol:1,service:"mbr-desk-vercel",build:"2026-09-10-fix-origin-global"});
     if(req.method==="GET" && p==="/") return html(res,200,`<html><body style="font-family:system-ui;background:#07111f;color:white;padding:40px"><h1>MBR Desk</h1><p>Serviço online.</p></body></html>`);
     if(req.method==="GET" && (p==="/activate"||p==="/manage")){
       const code=u.searchParams.get("code")||"";
