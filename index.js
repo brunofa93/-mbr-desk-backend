@@ -288,8 +288,11 @@ function page(kind,code){
   main{max-width:620px;margin:0 auto;padding:28px 18px}.logo{color:#d8ae55;font-weight:800;font-size:36px;letter-spacing:2px}
   .card{background:#101c2c;border:1px solid #27364b;border-radius:18px;padding:18px;margin-top:18px}
   button{background:#d8ae55;color:#07111f;border:0;border-radius:12px;padding:13px 16px;font-weight:750;font-size:16px}
-  input{width:100%;box-sizing:border-box;padding:12px;border-radius:10px;border:1px solid #3a4b64;background:#0b1626;color:white}
-  label{display:block;padding:7px 0}.muted{color:#aab4c4}.ok{color:#70d6a5}.err{color:#ffb3a9}
+  input[type=text],input:not([type]){width:100%;box-sizing:border-box;padding:12px;border-radius:10px;border:1px solid #3a4b64;background:#0b1626;color:white}
+  /* Checkbox precisa ficar de fora da regra acima: com width:100% ele virava uma
+     barra escura sobre fundo escuro e a lista de agendas parecia vazia. */
+  input[type=checkbox]{width:20px;height:20px;margin:0 10px 0 0;vertical-align:-4px;accent-color:#d8ae55}
+  label{display:block;padding:9px 0;font-size:16px;cursor:pointer}.muted{color:#aab4c4}.ok{color:#70d6a5}.err{color:#ffb3a9}
   .cityhit{display:block;width:100%;text-align:left;margin:4px 0;padding:10px 12px;border-radius:8px;
 border:1px solid #2a3b52;background:#0f1b2d;color:#e8eef7;font-size:15px;cursor:pointer}
 .cityhit:hover{background:#16243a}
@@ -419,7 +422,7 @@ export default async function handler(req,res){
       }
       return json(res,200,out);
     }
-    if(req.method==="GET" && p==="/api/info") return json(res,200,{ready:true,protocol:1,service:"mbr-desk-vercel",build:"2026-09-10-diag2"});
+    if(req.method==="GET" && p==="/api/info") return json(res,200,{ready:true,protocol:1,service:"mbr-desk-vercel",build:"2026-09-10-fix-agendas"});
     if(req.method==="GET" && p==="/") return html(res,200,`<html><body style="font-family:system-ui;background:#07111f;color:white;padding:40px"><h1>MBR Desk</h1><p>Serviço online.</p></body></html>`);
     if(req.method==="GET" && (p==="/activate"||p==="/manage")){
       const code=u.searchParams.get("code")||"";
@@ -534,3 +537,4 @@ export default async function handler(req,res){
     return json(res,500,{error:"server_error"});
   }
 }
+
