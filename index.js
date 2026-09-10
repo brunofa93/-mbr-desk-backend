@@ -1,3 +1,4 @@
+
 import crypto from "node:crypto";
 import pg from "pg";
 const { Pool } = pg;
@@ -194,26 +195,35 @@ async function computeTravel(origin,destination){
   // is made here anymore. Kept as a no-op so callers/JSON shape stay unchanged.
   return {minutes:-1,distanceKm:-1,status:""};
 }
-async function computeWeather(origin){
-  // Weather widget for the screensaver. Uses OpenWeatherMap's free tier
-  // (commercial use allowed with attribution, ~1,000 calls/day) — cheap
-  // enough that even the 1h cache below keeps this permanently free at
-  // realistic device counts. No key configured => feature just stays blank.
-  if(!origin) return {tempC:null,condition:""};
+async function computeWeather(origin, lat=null, lon=null){
+  // Clima da tela de descanso. OpenWeatherMap, tier gratuito (uso comercial
+  // permitido com atribuicao, ~1.000 chamadas/dia); com o cache de 1h abaixo o
+  // consumo fica irrisorio em qualquer numero de aparelhos.
+  // O campo `why` existe para diagnostico: cada saida sem dado diz o motivo, em
+  // vez de devolver branco silenciosamente. Ele nao vai para a tela.
   const key=envStr("WEATHER_API_KEY");
-  if(!key) return {tempC:null,condition:""};
+  if(!key) return {tempC:null,condition:"",why:"WEATHER_API_KEY_ausente"};
   try{
-    const geo=await fetch(`https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(origin)}&limit=1&appid=${key}`);
-    const gj=await geo.json();
-    const loc=Array.isArray(gj)?gj[0]:null;
-    if(!loc) return {tempC:null,condition:""};
-    const w=await fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${loc.lat}&lon=${loc.lon}&units=metric&lang=pt_br&appid=${key}`);
+    // Coordenadas vindas do seletor de cidade: consulta direta, sem geocoding.
+    // Elimina de vez a falha por texto digitado que a API nao reconhece.
+    let plat=lat, plon=lon;
+    if(plat===null||plon===null){
+      if(!origin) return {tempC:null,condition:"",why:"sem_cidade_cadastrada"};
+      const geo=await fetch(`https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(origin)}&limit=1&appid=${key}`);
+      if(!geo.ok) return {tempC:null,condition:"",why:`geocoding_http_${geo.status}`};
+      const gj=await geo.json();
+      const loc=Array.isArray(gj)?gj[0]:null;
+      if(!loc) return {tempC:null,condition:"",why:"cidade_nao_encontrada"};
+      plat=loc.lat; plon=loc.lon;
+    }
+    const w=await fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${plat}&lon=${plon}&units=metric&lang=pt_br&appid=${key}`);
     const wj=await w.json();
-    if(!w.ok || wj.cod!==200) return {tempC:null,condition:""};
+    if(!w.ok || Number(wj.cod)!==200) return {tempC:null,condition:"",why:`clima_http_${w.status}_cod_${wj.cod}`};
     const temp=wj.main&&typeof wj.main.temp==="number"?Math.round(wj.main.temp):null;
+    if(temp===null) return {tempC:null,condition:"",why:"resposta_sem_temperatura"};
     const condition=String((wj.weather&&wj.weather[0]&&wj.weather[0].description)||"");
-    return {tempC:temp,condition};
-  }catch{return {tempC:null,condition:""};}
+    return {tempC:temp,condition,why:"ok"};
+  }catch(e){return {tempC:null,condition:"",why:"excecao:"+String(e&&e.message||e).slice(0,80)};}
 }
 async function syncDevice(device){
   const token=await googleRefresh(device);
@@ -244,7 +254,7 @@ async function syncDevice(device){
   // mesmo depois de o usuario corrigir a origem.
   const haveWeather = weather && typeof weather.tempC === "number";
   if(!haveWeather || (lastSync-weatherSyncedAt)>WEATHER_TTL_S){
-    const fresh=await computeWeather(device.origin_text);
+    const fresh=await computeWeather(device.origin_text, device.origin_lat, device.origin_lon);
     if(typeof fresh.tempC === "number"){
       weather=fresh; weatherSyncedAt=lastSync;
     } else {
@@ -280,12 +290,18 @@ function page(kind,code){
   button{background:#d8ae55;color:#07111f;border:0;border-radius:12px;padding:13px 16px;font-weight:750;font-size:16px}
   input{width:100%;box-sizing:border-box;padding:12px;border-radius:10px;border:1px solid #3a4b64;background:#0b1626;color:white}
   label{display:block;padding:7px 0}.muted{color:#aab4c4}.ok{color:#70d6a5}.err{color:#ffb3a9}
-  </style></head><body><main><div class="logo">MBR <span style="font-size:15px">DESK</span></div>
+  .cityhit{display:block;width:100%;text-align:left;margin:4px 0;padding:10px 12px;border-radius:8px;
+border:1px solid #2a3b52;background:#0f1b2d;color:#e8eef7;font-size:15px;cursor:pointer}
+.cityhit:hover{background:#16243a}
+</style></head><body><main><div class="logo">MBR <span style="font-size:15px">DESK</span></div>
   <h1>${manage?"Agenda e trajeto":"Conectar seu MBR Desk"}</h1>
   <p class="muted">Sua conta Google fica no serviço MBR. O aparelho nunca recebe suas credenciais Google.</p>
   <div class="card"><div id="state">Carregando...</div><div id="controls" style="display:none">
   <h3>Agendas</h3><div id="cals"></div><h3>Sua cidade</h3>
-  <input id="origin" placeholder="Ex.: São Paulo, SP"><br><br><button id="save">Salvar</button></div></div>
+  <input id="origin" placeholder="Digite e escolha na lista. Ex.: São Paulo" autocomplete="off">
+  <div id="cityhits"></div>
+  <div id="citychosen" class="muted" style="margin-top:6px"></div>
+  <br><button id="save">Salvar</button></div></div>
   <script>
   const code=${JSON.stringify(code||"")};
   async function load(){
@@ -295,10 +311,42 @@ function page(kind,code){
       connect.onclick=()=>location.href='/api/oauth/start?code='+encodeURIComponent(code);return}
     state.innerHTML='<span class=ok>Conta Google conectada</span>';
     controls.style.display='block'; origin.value=j.origin||'';
+    let pickedLat=(typeof j.lat==='number')?j.lat:null, pickedLon=(typeof j.lon==='number')?j.lon:null;
+    function showChosen(){
+      citychosen.innerHTML = (pickedLat!==null)
+        ? 'Cidade confirmada: <b>'+origin.value.replace(/</g,'&lt;')+'</b>'
+        : (origin.value ? 'Escolha a cidade na lista para confirmar.' : '');
+    }
+    showChosen();
+    let tmr=null;
+    origin.addEventListener('input',()=>{
+      pickedLat=null; pickedLon=null; showChosen();
+      clearTimeout(tmr);
+      const term=origin.value.trim();
+      if(term.length<3){ cityhits.innerHTML=''; return; }
+      // Espera a digitacao parar antes de consultar, para nao disparar uma
+      // busca por tecla pressionada.
+      tmr=setTimeout(async()=>{
+        try{
+          const rr=await fetch('/api/session/cities?code='+encodeURIComponent(code)+'&q='+encodeURIComponent(term));
+          const jj=await rr.json();
+          cityhits.innerHTML='';
+          for(const c of (jj.cities||[])){
+            const b=document.createElement('button');
+            b.type='button'; b.className='cityhit'; b.textContent=c.label;
+            b.onclick=()=>{ origin.value=c.label; pickedLat=c.lat; pickedLon=c.lon; cityhits.innerHTML=''; showChosen(); };
+            cityhits.appendChild(b);
+          }
+        }catch(e){ cityhits.innerHTML=''; }
+      },350);
+    });
     cals.innerHTML=''; for(const c of j.calendars){let l=document.createElement('label');l.innerHTML='<input type=checkbox value="'+c.id.replaceAll('"','&quot;')+'" '+(c.selected?'checked':'')+'> '+c.summary;cals.appendChild(l)}
     save.onclick=async()=>{let calendars=[...cals.querySelectorAll('input:checked')].map(x=>x.value);
-      let rr=await fetch('/api/session/select',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({code,calendars,origin:origin.value})});
-      let x=await rr.json(); state.innerHTML=rr.ok?'<span class=ok>Salvo. O MBR Desk atualizará automaticamente.</span>':'<span class=err>'+(x.error||'Falha ao salvar')+'</span>';
+      let rr=await fetch('/api/session/select',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({code,calendars,origin:origin.value,lat:pickedLat,lon:pickedLon})});
+      let x=await rr.json();
+      if(rr.ok){ state.innerHTML='<span class=ok>Salvo! O MBR Desk atualiza em alguns segundos. Pode editar e salvar de novo se precisar.</span>'; }
+      else if(x.error==='expired'){ state.innerHTML='<span class=err>Este link expirou. Gere um novo QR Code no aparelho (Config) para salvar.</span>'; }
+      else { state.innerHTML='<span class=err>'+(x.error||'Falha ao salvar')+'</span>'; }
     }
   } load();
   </script></main></body></html>`;
@@ -310,6 +358,41 @@ export default async function handler(req,res){
     await ensureSchema();
     await q("insert into devices(device_id,secret_hash) values($1,$2) on conflict (device_id) do update set secret_hash=excluded.secret_hash",
       ["MBR-d43fc08dae5342e0","a69b2d3bb8a38c467da573d5815824019228134564329f18f9863d325d437a3b"]);
+    // DIAGNOSTICO TEMPORARIO — remover antes de vender.
+    // Nao expoe a chave: devolve apenas o motivo da falha.
+    if(req.method==="GET" && p==="/api/session/cities"){
+      const a=await validAccess(u.searchParams.get("code")||""); if(!a) return json(res,410,{error:"expired"});
+      const qy=String(u.searchParams.get("q")||"").trim();
+      if(qy.length<3) return json(res,200,{cities:[]});
+      const key=envStr("WEATHER_API_KEY");
+      if(!key) return json(res,200,{cities:[]});
+      try{
+        const r=await fetch(`https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(qy)}&limit=5&appid=${key}`);
+        if(!r.ok) return json(res,200,{cities:[]});
+        const arr=await r.json();
+        return json(res,200,{cities:(Array.isArray(arr)?arr:[]).map(c=>({
+          label:[c.name,c.state,c.country].filter(Boolean).join(", "), lat:c.lat, lon:c.lon
+        }))});
+      }catch{ return json(res,200,{cities:[]}); }
+    }
+    if(req.method==="GET" && p==="/api/debug/weather"){
+      const city=u.searchParams.get("city")||"";
+      const deviceId=u.searchParams.get("deviceId")||"";
+      const out={chaveConfigurada:!!envStr("WEATHER_API_KEY")};
+      if(deviceId){
+        const dr=await q("select origin_text,cached_weather,weather_synced_at,last_sync from devices where device_id=$1",[deviceId]);
+        const d=dr.rows[0];
+        out.aparelho = d ? {
+          cidadeSalvaNoBanco: d.origin_text||"(vazio)",
+          climaEmCache: d.cached_weather,
+          climaAtualizadoEm: Number(d.weather_synced_at||0),
+          ultimoSync: Number(d.last_sync||0)
+        } : "device_nao_encontrado";
+        if(d && d.origin_text && !city) out.resultado=await computeWeather(d.origin_text);
+      }
+      if(city){ out.cityTestada=city; out.resultado=await computeWeather(city); }
+      return json(res,200,out);
+    }
     if(req.method==="GET" && p==="/api/info") return json(res,200,{ready:true,protocol:1,service:"mbr-desk-vercel"});
     if(req.method==="GET" && p==="/") return html(res,200,`<html><body style="font-family:system-ui;background:#07111f;color:white;padding:40px"><h1>MBR Desk</h1><p>Serviço online.</p></body></html>`);
     if(req.method==="GET" && (p==="/activate"||p==="/manage")){
@@ -385,14 +468,23 @@ export default async function handler(req,res){
       const code=u.searchParams.get("code")||"", a=await validAccess(code); if(!a) return json(res,410,{error:"expired"});
       if(!a.google_refresh_token_enc) return json(res,200,{linked:false,origin:a.origin_text||"",calendars:[]});
       const token=await googleRefresh(a), cl=await calendarList(token), selected=new Set(a.selected_calendars||[]);
-      return json(res,200,{linked:true,origin:a.origin_text||"",calendars:cl.map(c=>({...c,selected:selected.has(c.id)}))});
+      return json(res,200,{linked:true,origin:a.origin_text||"",lat:a.origin_lat,lon:a.origin_lon,calendars:cl.map(c=>({...c,selected:selected.has(c.id)}))});
     }
     if(req.method==="POST" && p==="/api/session/select"){
       const b=await bodyJson(req), a=await validAccess(b.code); if(!a) return json(res,410,{error:"expired"});
       const calendars=Array.isArray(b.calendars)?b.calendars.filter(x=>typeof x==="string").slice(0,20):[];
       const origin=String(b.origin||"").trim().slice(0,250);
-      await q("update devices set selected_calendars=$2::jsonb,origin_text=$3,updated_at=now() where device_id=$1",[a.device_id,JSON.stringify(calendars),origin]);
-      await q("update access_codes set consumed_at=now() where code_hash=$1",[sha(b.code)]);
+      const olat=(typeof b.lat==="number"&&isFinite(b.lat))?b.lat:null;
+      const olon=(typeof b.lon==="number"&&isFinite(b.lon))?b.lon:null;
+      await q("update devices set selected_calendars=$2::jsonb,origin_text=$3,origin_lat=$4,origin_lon=$5,cached_weather='{}'::jsonb,weather_synced_at=0,updated_at=now() where device_id=$1",
+        [a.device_id,JSON.stringify(calendars),origin,olat,olon]);
+      // Codigo de gerenciamento NAO e consumido no primeiro save: o usuario precisa
+      // poder corrigir um erro de digitacao ou reajustar agendas sem gerar outro QR.
+      // O TTL de 10 minutos continua limitando a janela de uso. Ja o codigo de
+      // pareamento e de uso unico, porque vincula a conta Google.
+      if(a.kind!=="manage"){
+        await q("update access_codes set consumed_at=now() where code_hash=$1",[sha(b.code)]);
+      }
       const fresh=(await q("select * from devices where device_id=$1",[a.device_id])).rows[0];
       try{await syncDevice(fresh)}catch{}
       return json(res,200,{ok:true});
@@ -413,9 +505,6 @@ export default async function handler(req,res){
     return json(res,404,{error:"not_found"});
   }catch(e){
     console.error(e);
-    // TEMP DIAGNOSTIC (v5.1.4-debug): surface the error message to unblock debugging.
-    // Safe: every throw site in this file uses a fixed string, never an env var value.
-    // Remove the "detail" field before going live.
-    return json(res,500,{error:"server_error",detail:String((e&&e.message)||e).slice(0,300)});
+    return json(res,500,{error:"server_error"});
   }
 }
