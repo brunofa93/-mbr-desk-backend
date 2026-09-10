@@ -1,4 +1,3 @@
-
 import crypto from "node:crypto";
 import pg from "pg";
 const { Pool } = pg;
@@ -208,7 +207,7 @@ async function computeWeather(origin){
     const gj=await geo.json();
     const loc=Array.isArray(gj)?gj[0]:null;
     if(!loc) return {tempC:null,condition:""};
-    const w=await fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${loc.lat}&lon=${loc.lon}&units=metric&appid=${key}`);
+    const w=await fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${loc.lat}&lon=${loc.lon}&units=metric&lang=pt_br&appid=${key}`);
     const wj=await w.json();
     if(!w.ok || wj.cod!==200) return {tempC:null,condition:""};
     const temp=wj.main&&typeof wj.main.temp==="number"?Math.round(wj.main.temp):null;
@@ -240,9 +239,17 @@ async function syncDevice(device){
                             // API usage trivial (~24 calls/day/device) at any device count.
   let weather=device.cached_weather||{tempC:null,condition:""};
   let weatherSyncedAt=Number(device.weather_synced_at||0);
-  if(!device.cached_weather || (lastSync-weatherSyncedAt)>WEATHER_TTL_S){
-    weather=await computeWeather(device.origin_text);
-    weatherSyncedAt=lastSync;
+  // Um resultado vazio (sem origem salva, chave ainda inativa, falha de rede) NAO
+  // conta como cache valido — senao ficaria uma hora inteira sem tentar de novo,
+  // mesmo depois de o usuario corrigir a origem.
+  const haveWeather = weather && typeof weather.tempC === "number";
+  if(!haveWeather || (lastSync-weatherSyncedAt)>WEATHER_TTL_S){
+    const fresh=await computeWeather(device.origin_text);
+    if(typeof fresh.tempC === "number"){
+      weather=fresh; weatherSyncedAt=lastSync;
+    } else {
+      weather=fresh; weatherSyncedAt=0;   // continua tentando no proximo sync
+    }
   }
   await q(`update devices set selected_calendars=$2::jsonb,last_sync=$3,last_status='online',
     cached_events=$4::jsonb,cached_month_shifts=$5::jsonb,cached_weather=$6::jsonb,weather_synced_at=$7,updated_at=now() where device_id=$1`,
@@ -277,8 +284,8 @@ function page(kind,code){
   <h1>${manage?"Agenda e trajeto":"Conectar seu MBR Desk"}</h1>
   <p class="muted">Sua conta Google fica no serviço MBR. O aparelho nunca recebe suas credenciais Google.</p>
   <div class="card"><div id="state">Carregando...</div><div id="controls" style="display:none">
-  <h3>Agendas</h3><div id="cals"></div><h3>Origem do trajeto</h3>
-  <input id="origin" placeholder="Ex.: Casa, endereço completo"><br><br><button id="save">Salvar</button></div></div>
+  <h3>Agendas</h3><div id="cals"></div><h3>Sua cidade</h3>
+  <input id="origin" placeholder="Ex.: São Paulo, SP"><br><br><button id="save">Salvar</button></div></div>
   <script>
   const code=${JSON.stringify(code||"")};
   async function load(){
