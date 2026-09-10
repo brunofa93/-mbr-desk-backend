@@ -1,4 +1,3 @@
-
 import crypto from "node:crypto";
 import pg from "pg";
 const { Pool } = pg;
@@ -393,7 +392,7 @@ export default async function handler(req,res){
       if(city){ out.cityTestada=city; out.resultado=await computeWeather(city); }
       return json(res,200,out);
     }
-    if(req.method==="GET" && p==="/api/info") return json(res,200,{ready:true,protocol:1,service:"mbr-desk-vercel"});
+    if(req.method==="GET" && p==="/api/info") return json(res,200,{ready:true,protocol:1,service:"mbr-desk-vercel",build:"2026-09-10-seletor-cidade"});
     if(req.method==="GET" && p==="/") return html(res,200,`<html><body style="font-family:system-ui;background:#07111f;color:white;padding:40px"><h1>MBR Desk</h1><p>Serviço online.</p></body></html>`);
     if(req.method==="GET" && (p==="/activate"||p==="/manage")){
       const code=u.searchParams.get("code")||"";
