@@ -414,15 +414,28 @@ border:1px solid #2a3b52;background:#0f1b2d;color:#e8eef7;font-size:15px;cursor:
     }
     readCity();
     origin.addEventListener('change',readCity);
-    cals.innerHTML=''; for(const c of j.calendars){let l=document.createElement('label');l.innerHTML='<input type=checkbox value="'+c.id.replaceAll('"','&quot;')+'" '+(c.selected?'checked':'')+'> '+c.summary;cals.appendChild(l)}
+    // O botao Salvar e ligado ANTES de desenhar as agendas: se a lista falhar por
+    // qualquer motivo, salvar continua funcionando em vez de ficar mudo.
     save.onclick=async()=>{let calendars=[...cals.querySelectorAll('input:checked')].map(x=>x.value);
       let rr=await fetch('/api/session/select',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({code,calendars,origin:readCity(),lat:pickedLat,lon:pickedLon})});
       let x=await rr.json();
       if(rr.ok){ state.innerHTML='<span class=ok>Salvo! O MBR Desk atualiza em alguns segundos. Pode editar e salvar de novo se precisar.</span>'; }
       else if(x.error==='expired'){ state.innerHTML='<span class=err>Este link expirou. Gere um novo QR Code no aparelho (Config) para salvar.</span>'; }
       else { state.innerHTML='<span class=err>'+(x.error||'Falha ao salvar')+'</span>'; }
-    }
-  } load();
+    };
+    try{
+      const lista=Array.isArray(j.calendars)?j.calendars:[];
+      cals.innerHTML='';
+      if(!lista.length){ cals.innerHTML='<span class=muted>Nenhuma agenda retornada pelo Google.</span>'; }
+      for(const c of lista){
+        const l=document.createElement('label');
+        l.innerHTML='<input type=checkbox value="'+String(c.id).replaceAll('"','&quot;')+'" '+(c.selected?'checked':'')+'> '+c.summary;
+        cals.appendChild(l);
+      }
+    }catch(e){ cals.innerHTML='<span class=err>Erro ao listar agendas: '+e.message+'</span>'; }
+  }
+  // Qualquer falha inesperada aparece na tela em vez de deixar a pagina muda.
+  load().catch(e=>{ state.innerHTML='<span class=err>Erro na pagina: '+e.message+'</span>'; });
   </script></main></body></html>`;
 }
 
@@ -493,7 +506,7 @@ export default async function handler(req,res){
       }
       return json(res,200,out);
     }
-    if(req.method==="GET" && p==="/api/info") return json(res,200,{ready:true,protocol:1,service:"mbr-desk-vercel",build:"2026-09-10-select-cidade"});
+    if(req.method==="GET" && p==="/api/info") return json(res,200,{ready:true,protocol:1,service:"mbr-desk-vercel",build:"2026-09-10-salvar-robusto"});
     if(req.method==="GET" && p==="/") return html(res,200,`<html><body style="font-family:system-ui;background:#07111f;color:white;padding:40px"><h1>MBR Desk</h1><p>Serviço online.</p></body></html>`);
     if(req.method==="GET" && (p==="/activate"||p==="/manage")){
       const code=u.searchParams.get("code")||"";
@@ -608,3 +621,4 @@ export default async function handler(req,res){
     return json(res,500,{error:"server_error"});
   }
 }
+
